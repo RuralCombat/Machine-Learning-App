@@ -18,6 +18,7 @@ def add_technical_indicators(df):
     st.write("First few rows of the data:")
     st.write(df.head())
 
+    # Ensure that 'Close' and 'Volume' are Series (1D) and not DataFrame (2D)
     close = df['Close']
     volume = df['Volume']
 
