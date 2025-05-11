@@ -14,6 +14,10 @@ def add_technical_indicators(df):
         st.error("Missing 'Close' or 'Volume' columns in the stock data.")
         return df  # Early exit if essential columns are missing
     
+    # Print the first few rows of the data to ensure it's correct
+    st.write("First few rows of the data:")
+    st.write(df.head())
+
     close = df['Close']
     volume = df['Volume']
 
@@ -32,6 +36,7 @@ def add_technical_indicators(df):
             df[name] = func()
         except Exception as e:
             print(f"Error computing {name}: {e}")
+            st.write(f"Error computing {name}: {e}")
 
     # Create target column (next day's price movement)
     df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
