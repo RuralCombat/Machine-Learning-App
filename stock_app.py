@@ -22,13 +22,13 @@ def add_technical_indicators(df):
     volume = df['Volume']
 
     indicators = {
-        'SMA': lambda: ta.trend.sma_indicator(close=close, window=14),
-        'EMA': lambda: ta.trend.ema_indicator(close=close, window=14),
-        'RSI': lambda: ta.momentum.rsi(close=close, window=14),
-        'MACD': lambda: ta.trend.macd_diff(close=close),
-        'BB_H': lambda: ta.volatility.bollinger_hband(close=close),
-        'BB_L': lambda: ta.volatility.bollinger_lband(close=close),
-        'Volume_SMA': lambda: ta.trend.sma_indicator(close=volume, window=14)
+        'SMA': lambda: ta.trend.sma_indicator(close, window=14),
+        'EMA': lambda: ta.trend.ema_indicator(close, window=14),
+        'RSI': lambda: ta.momentum.rsi(close, window=14),
+        'MACD': lambda: ta.trend.macd_diff(close),
+        'BB_H': lambda: ta.volatility.bollinger_hband(close),
+        'BB_L': lambda: ta.volatility.bollinger_lband(close),
+        'Volume_SMA': lambda: ta.trend.sma_indicator(volume, window=14)
     }
 
     for name, func in indicators.items():
