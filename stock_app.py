@@ -10,6 +10,10 @@ import matplotlib.pyplot as plt
 
 # Function to add technical indicators
 def add_technical_indicators(df):
+    if 'Close' not in df.columns or 'Volume' not in df.columns:
+        st.error("Missing 'Close' or 'Volume' columns in the stock data.")
+        return df  # Early exit if essential columns are missing
+    
     close = df['Close']
     volume = df['Volume']
 
@@ -29,22 +33,24 @@ def add_technical_indicators(df):
         except Exception as e:
             print(f"Error computing {name}: {e}")
 
+    # Create target column (next day's price movement)
     df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
 
+    # Check if the required columns are present
     required_cols = list(indicators.keys())
     available = [col for col in required_cols if col in df.columns]
 
     if len(available) < len(required_cols):
         missing = list(set(required_cols) - set(available))
-        print(f"Missing columns: {missing}")
-
-    # Only print NaNs for existing columns
-    if available:
-        print("NaN count before dropna:")
-        print(df[available].isna().sum())
-
-    # Drop rows with NaNs in the required indicators (only those that exist)
+        st.write(f"Missing columns: {missing}")
+    
+    # Drop rows with NaN values in the available columns
     df.dropna(subset=available, inplace=True)
+
+    # Print number of NaN values before dropping
+    if available:
+        st.write("NaN count before dropna:")
+        st.write(df[available].isna().sum())
 
     return df
 
@@ -72,7 +78,7 @@ def train_model(df):
 # Function to plot feature importance
 def plot_feature_importance(model, feature_names):
     importance = model.feature_importances_
-    
+
     # Sort the importance values and corresponding features
     sorted_idx = np.argsort(importance)
     sorted_importance = importance[sorted_idx]
