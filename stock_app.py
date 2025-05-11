@@ -1,110 +1,119 @@
-import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import ta
-from sklearn.ensemble import RandomForestClassifier
+import streamlit as st
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="📊 Stock Technical Analysis & Prediction")
-
-st.title("📊 Stock Technical Analysis & Prediction")
-
-ticker = st.text_input("Enter Stock Ticker (e.g., WIPRO.NS):")
-
-@st.cache_data
-def download_data(ticker):
-    try:
-        df = yf.download(ticker, period="2y", interval="1d", progress=False)
-        return df
-    except Exception as e:
-        st.error(f"Download error: {e}")
-        return pd.DataFrame()
-
+# Function to add technical indicators
 def add_technical_indicators(df):
-    try:
-        close = df['Close'].squeeze()
-        volume = df['Volume'].squeeze()
+    close = df['Close']
+    volume = df['Volume']
 
-        df['SMA'] = ta.trend.sma_indicator(close)
-        df['EMA'] = ta.trend.ema_indicator(close)
-        df['RSI'] = ta.momentum.rsi(close)
-        df['MACD'] = ta.trend.macd_diff(close)
-        df['BB_H'] = ta.volatility.bollinger_hband(close)
-        df['BB_L'] = ta.volatility.bollinger_lband(close)
-        df['Volume_SMA'] = ta.trend.sma_indicator(volume)
+    indicators = {
+        'SMA': lambda: ta.trend.sma_indicator(close=close, window=14),
+        'EMA': lambda: ta.trend.ema_indicator(close=close, window=14),
+        'RSI': lambda: ta.momentum.rsi(close=close, window=14),
+        'MACD': lambda: ta.trend.macd_diff(close=close),
+        'BB_H': lambda: ta.volatility.bollinger_hband(close=close),
+        'BB_L': lambda: ta.volatility.bollinger_lband(close=close),
+        'Volume_SMA': lambda: ta.trend.sma_indicator(close=volume, window=14)
+    }
 
-        df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
-        df.dropna(inplace=True)
-        return df
-    except Exception as e:
-        st.error(f"Error computing indicators: {e}")
-        return None
+    for name, func in indicators.items():
+        try:
+            df[name] = func()
+        except Exception as e:
+            print(f"Error computing {name}: {e}")
 
+    df['Target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
+
+    required_cols = list(indicators.keys())
+    available = [col for col in required_cols if col in df.columns]
+
+    if len(available) < len(required_cols):
+        missing = list(set(required_cols) - set(available))
+        print(f"Missing columns: {missing}")
+
+    # Only print NaNs for existing columns
+    if available:
+        print("NaN count before dropna:")
+        print(df[available].isna().sum())
+
+    # Drop rows with NaNs in the required indicators (only those that exist)
+    df.dropna(subset=available, inplace=True)
+
+    return df
+
+# Function to train a RandomForest model
 def train_model(df):
     features = ['SMA', 'EMA', 'RSI', 'MACD', 'BB_H', 'BB_L', 'Volume_SMA']
-    missing = [f for f in features if f not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns for model training: {missing}")
+    missing_columns = [col for col in features if col not in df.columns]
+    
+    if missing_columns:
+        raise ValueError(f"Missing columns for model training: {missing_columns}")
 
     X = df[features]
     y = df['Target']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    model = RandomForestClassifier(random_state=42)
     model.fit(X_train, y_train)
+
     y_pred = model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
 
-    return model, acc, X_test, y_test, y_pred
+    return model, acc, X_test
 
-def plot_price_with_indicators(df):
-    st.subheader("📈 Closing Price with SMA and EMA")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(df.index, df['Close'], label='Close Price')
-    ax.plot(df.index, df['SMA'], label='SMA')
-    ax.plot(df.index, df['EMA'], label='EMA')
-    ax.set_title("Close Price with SMA & EMA")
-    ax.legend()
-    st.pyplot(fig)
-
-def plot_feature_importance(model, features):
-    st.subheader("📊 Feature Importance")
+# Function to plot feature importance
+def plot_feature_importance(model, feature_names):
     importance = model.feature_importances_
-    fig, ax = plt.subplots()
-    ax.barh(features, importance)
-    ax.set_xlabel("Importance")
-    st.pyplot(fig)
+    
+    # Sort the importance values and corresponding features
+    sorted_idx = np.argsort(importance)
+    sorted_importance = importance[sorted_idx]
+    sorted_features = np.array(feature_names)[sorted_idx]
 
-def plot_prediction(y_test, y_pred):
-    st.subheader("🔍 Actual vs Predicted Trend")
-    fig, ax = plt.subplots()
-    ax.plot(y_test.values, label='Actual')
-    ax.plot(y_pred, label='Predicted')
-    ax.set_title("Actual vs Predicted (1 = Price Up, 0 = Price Down)")
-    ax.legend()
-    st.pyplot(fig)
+    # Plot the feature importance
+    plt.figure(figsize=(10, 6))
+    plt.barh(sorted_features, sorted_importance, color='royalblue')
+    plt.xlabel('Feature Importance')
+    plt.title('Feature Importance for Model')
+    plt.show()
 
-if ticker:
-    st.write(f"Fetching data for: `{ticker}`")
-    df = download_data(ticker)
+# Streamlit UI
+st.title('📊 Stock Technical Analysis & Prediction')
 
-    if not df.empty:
-        df = add_technical_indicators(df)
+stock_ticker = st.text_input("Enter Stock Ticker (e.g., WIPRO.NS):")
 
-        if df is not None:
-            st.write("✅ Sample Data with Technical Indicators")
-            st.dataframe(df.tail())
-
+if stock_ticker:
+    st.write(f"Fetching data for: {stock_ticker}")
+    
+    try:
+        # Fetch stock data from Yahoo Finance
+        df = yf.download(stock_ticker, period="1y", interval="1d")
+        
+        if df.empty:
+            st.error("Failed to fetch data. Please check the ticker.")
+        else:
+            # Add technical indicators to the dataframe
+            df = add_technical_indicators(df)
+            
+            # Train the model and evaluate accuracy
             try:
-                model, acc, X_test, y_test, y_pred = train_model(df)
-                st.success(f"🎯 Model trained with {acc:.2%} accuracy.")
+                model, acc, X_test = train_model(df)
+                st.write(f"Model accuracy: {acc:.2f}")
 
-                plot_price_with_indicators(df)
+                # Plot feature importance
+                st.subheader("Feature Importance")
                 plot_feature_importance(model, X_test.columns)
-                plot_prediction(y_test, y_pred)
 
             except ValueError as e:
                 st.error(str(e))
+                
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
